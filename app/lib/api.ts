@@ -1,7 +1,7 @@
 // Simple API helper for the mobile app with SecureStore persistence
 import * as SecureStore from 'expo-secure-store';
 
-const BASE = 'http://localhost:5000/api'; // adjust for emulator if needed (10.0.2.2)
+const BASE = 'https://stock-management-backend-harsh2610.onrender.com/api'; // adjust for emulator if needed (10.0.2.2)
 const TOKEN_KEY = 'auth_token';
 
 let token: string | null = null;
