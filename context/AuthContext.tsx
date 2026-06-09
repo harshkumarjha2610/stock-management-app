@@ -31,7 +31,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           // fetch profile
           try {
             const profile = await api.apiGet('/users/profile');
-            setUser(profile);
+            if (profile?.role === 'STAFF') {
+              try {
+                const staff = await api.apiGet('/staff/me');
+                setUser({ ...staff, role: profile.role, email: profile.email });
+              } catch (innerErr) {
+                setUser(profile);
+              }
+            } else {
+              setUser(profile);
+            }
           } catch (e) {
             try {
               const staff = await api.apiGet('/staff/me');
@@ -61,7 +70,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (data?.token) {
         await api.setToken(data.token);
       }
-      if (data?.user) setUser(data.user);
+      if (data?.user) {
+        if (data.user.role === 'STAFF') {
+          try {
+            const staff = await api.apiGet('/staff/me');
+            setUser({ ...staff, role: data.user.role, email: data.user.email });
+          } catch (innerErr) {
+            setUser(data.user);
+          }
+        } else {
+          setUser(data.user);
+        }
+      }
       setIsLoading(false);
       return { success: true };
     } catch (err: any) {

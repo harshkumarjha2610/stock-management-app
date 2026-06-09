@@ -211,7 +211,7 @@ export default function HomeScreen() {
           text: 'Check In',
           onPress: async () => {
             try {
-              const staffId = (user && user.id) || (employee && employee.id);
+              const staffId = (employee && employee.id) || (user && user.id);
               if (!staffId) throw new Error('Staff id not available');
               const att = await api.apiPost(`/staff/${staffId}/check-in`);
               const ci = att?.check_in ? new Date(att.check_in) : new Date();
@@ -243,7 +243,7 @@ export default function HomeScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              const staffId = (user && user.id) || (employee && employee.id);
+              const staffId = (employee && employee.id) || (user && user.id);
               if (!staffId) throw new Error('Staff id not available');
               const att = await api.apiPost(`/staff/${staffId}/check-out`);
               const co = att?.check_out ? new Date(att.check_out) : new Date();

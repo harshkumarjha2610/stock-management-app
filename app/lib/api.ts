@@ -8,7 +8,7 @@ let token: string | null = null;
 
 export const setToken = async (t: string | null) => {
   token = t;
-  if (t) {
+  if (t) {  
     await SecureStore.setItemAsync(TOKEN_KEY, t);
   } else {
     await SecureStore.deleteItemAsync(TOKEN_KEY);
