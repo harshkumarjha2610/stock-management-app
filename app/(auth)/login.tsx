@@ -193,19 +193,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Helper credentials for demo */}
-            <View style={styles.demoCard}>
-              <View style={styles.demoHeader}>
-                <Ionicons name="information-circle-outline" size={16} color="#0ea5e9" />
-                <Text style={styles.demoTitle}>Demo Credentials</Text>
-              </View>
-              <Text style={styles.demoLabel}>
-                Email: <Text style={styles.demoValue}>admin@employer.com</Text>
-              </Text>
-              <Text style={styles.demoLabel}>
-                Password: <Text style={styles.demoValue}>123456</Text>
-              </Text>
-            </View>
+            {/* No demo credentials — use real backend credentials */}
           </ScrollView>
         </TouchableWithoutFeedback>
       </KeyboardAvoidingView>

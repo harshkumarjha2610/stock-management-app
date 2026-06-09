@@ -16,6 +16,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
+import api from '@/app/lib/api';
+import { useEffect } from 'react';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const IS_SMALL = SCREEN_WIDTH < 375;
@@ -29,6 +31,23 @@ export default function EmployerProfileScreen() {
   // Settings states
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
+  const [store, setStore] = useState<any | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadStore = async () => {
+      try {
+        const sid = (user && (user.store_id || user.storeId)) || null;
+        if (!sid) return;
+        const s = await api.apiGet(`/stores/${sid}`);
+        if (mounted) setStore(s);
+      } catch (e) {
+        // ignore
+      }
+    };
+    loadStore();
+    return () => { mounted = false; };
+  }, [user]);
 
   const C = {
     bg: isDark ? '#0f172a' : '#f1f5f9',
@@ -97,18 +116,20 @@ export default function EmployerProfileScreen() {
         {/* Company Identity Card */}
         <View style={[styles.companyCard, { backgroundColor: C.card, borderColor: C.border }, shadow(4)]}>
           <View style={styles.cardHeader}>
-            <View style={[styles.logoContainer, { backgroundColor: C.primaryGlow }]}>
+            <View style={[styles.logoContainer, { backgroundColor: C.primaryGlow }]}> 
               <Ionicons name="business" size={32} color={C.primary} />
             </View>
             <View style={styles.companyMeta}>
               <View style={styles.nameRow}>
-                <Text style={[styles.companyName, { color: C.text }]}>TechSolutions Group</Text>
-                <View style={[styles.verifiedBadge, { backgroundColor: C.successGlow }]}>
-                  <Ionicons name="checkmark-circle" size={14} color={C.success} />
-                  <Text style={[styles.verifiedText, { color: C.success }]}>Verified</Text>
-                </View>
+                <Text style={[styles.companyName, { color: C.text }]}>{store?.name ?? 'Company'}</Text>
+                {store?.verified && (
+                  <View style={[styles.verifiedBadge, { backgroundColor: C.successGlow }]}> 
+                    <Ionicons name="checkmark-circle" size={14} color={C.success} />
+                    <Text style={[styles.verifiedText, { color: C.success }]}>Verified</Text>
+                  </View>
+                )}
               </View>
-              <Text style={[styles.industryText, { color: C.muted }]}>Software & IT Services</Text>
+              <Text style={[styles.industryText, { color: C.muted }]}>{store?.industry ?? ''}</Text>
             </View>
           </View>
 
@@ -117,14 +138,14 @@ export default function EmployerProfileScreen() {
           <View style={styles.adminMeta}>
             <Ionicons name="person-circle-outline" size={20} color={C.muted} />
             <Text style={[styles.adminLabel, { color: C.muted }]}>Admin:</Text>
-            <Text style={[styles.adminValue, { color: C.text }]}>{user?.name || 'Harsh Kumar'}</Text>
+              <Text style={[styles.adminValue, { color: C.text }]}>{user?.name || '—'}</Text>
           </View>
 
           <View style={styles.adminMeta}>
             <Ionicons name="mail-outline" size={20} color={C.muted} />
             <Text style={[styles.adminLabel, { color: C.muted }]}>Email:</Text>
             <Text style={[styles.adminValue, { color: C.text }]} numberOfLines={1}>
-              {user?.email || 'admin@employer.com'}
+              {user?.email || '—'}
             </Text>
           </View>
         </View>
@@ -132,15 +153,15 @@ export default function EmployerProfileScreen() {
         {/* Analytics Stats Grid */}
         <View style={styles.statsRow}>
           <View style={[styles.statBox, { backgroundColor: C.card, borderColor: C.border }, shadow(2)]}>
-            <Text style={[styles.statValue, { color: C.text }]}>124</Text>
+            <Text style={[styles.statValue, { color: C.text }]}>{store?.staff_count ?? '—'}</Text>
             <Text style={[styles.statLabel, { color: C.muted }]}>Total Staff</Text>
           </View>
           <View style={[styles.statBox, { backgroundColor: C.card, borderColor: C.border }, shadow(2)]}>
-            <Text style={[styles.statValue, { color: C.text }]}>Active</Text>
+            <Text style={[styles.statValue, { color: C.text }]}>{store?.active_shifts ? 'Active' : '—'}</Text>
             <Text style={[styles.statLabel, { color: C.muted }]}>Shifts Live</Text>
           </View>
           <View style={[styles.statBox, { backgroundColor: C.card, borderColor: C.border }, shadow(2)]}>
-            <Text style={[styles.statValue, { color: C.text }]}>96.8%</Text>
+            <Text style={[styles.statValue, { color: C.text }]}>{store?.attendance_rate ? `${store.attendance_rate}%` : '—'}</Text>
             <Text style={[styles.statLabel, { color: C.muted }]}>Attendance</Text>
           </View>
         </View>
@@ -201,11 +222,11 @@ export default function EmployerProfileScreen() {
         <Text style={[styles.sectionHeading, { color: C.text }]}>Organization Details</Text>
         <View style={[styles.detailsContainer, { backgroundColor: C.card, borderColor: C.border }, shadow(2)]}>
           {[
-            { label: 'Register ID', val: 'TSG-2026-N09', icon: 'finger-print-outline' },
-            { label: 'Incorporation', val: 'January 12, 2021', icon: 'calendar-outline' },
-            { label: 'Office Address', val: 'Sector 62, Noida, UP, India', icon: 'location-outline' },
-            { label: 'Primary Website', val: 'https://techsolutions.corp', icon: 'globe-outline', link: 'https://techsolutions.corp' },
-            { label: 'Support Hotline', val: '+91 98765 43210', icon: 'call-outline', link: 'tel:+919876543210' },
+            { label: 'Register ID', val: store?.register_id ?? '—', icon: 'finger-print-outline' },
+            { label: 'Incorporation', val: store?.incorporation_date ?? '—', icon: 'calendar-outline' },
+            { label: 'Office Address', val: store?.address ?? '—', icon: 'location-outline' },
+            { label: 'Primary Website', val: store?.website ?? '', icon: 'globe-outline', link: store?.website },
+            { label: 'Support Hotline', val: store?.phone ?? '', icon: 'call-outline', link: store?.phone ? `tel:${store.phone}` : undefined },
           ].map((detail, idx) => (
             <View key={idx}>
               {idx > 0 && <View style={[styles.divider, { backgroundColor: C.border, marginVertical: 0 }]} />}

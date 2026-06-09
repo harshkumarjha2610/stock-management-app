@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { useAuth } from '@/context/AuthContext';
+import api from '@/app/lib/api';
 
 // ── Responsive Helpers ────────────────────────────────────────────────────────
 
@@ -44,26 +45,7 @@ const shadow = (elevation = 3): object =>
     default: {},
   }) as object;
 
-// ── Mock Data ─────────────────────────────────────────────────────────────────
-
-const EMPLOYEE = {
-  name: 'Harsh Kumar',
-  id: 'EMP-2401',
-  department: 'Engineering',
-  designation: 'Full Stack Developer',
-  avatar: 'HK',
-};
-
-const SALARY = {
-  month: 'April 2026',
-  netPay: 85000,
-  basic: 50000,
-  hra: 20000,
-  allowances: 8000,
-  pf: 6000,
-  tax: 7000,
-  creditedOn: 'Apr 1, 2026',
-};
+// Employee & salary will be loaded from backend
 
 const MONTH_NAMES = [
   'January', 'February', 'March', 'April', 'May', 'June',
@@ -86,36 +68,10 @@ const calcDuration = (start: Date, end: Date) => {
   return `${h}h ${m}m`;
 };
 
-const generateAttendance = (year: number, month: number) => {
-  const today = new Date();
-  const days = new Date(year, month + 1, 0).getDate();
-  const records: Record<number, string> = {};
-
-  for (let d = 1; d <= days; d++) {
-    const date = new Date(year, month, d);
-    const dow = date.getDay();
-    const isToday = date.toDateString() === today.toDateString();
-    const isPast = date < today && !isToday;
-
-    if (isToday) records[d] = 'T';
-    else if (dow === 0 || dow === 6) records[d] = 'W';
-    else if (!isPast) records[d] = '';
-    else {
-      const seed = d * 7 + month;
-      if (seed % 9 === 0) records[d] = 'A';
-      else if (seed % 11 === 0) records[d] = 'L';
-      else if (seed % 13 === 0) records[d] = 'H';
-      else records[d] = 'P';
-    }
-  }
-
-  return records;
-};
-
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export default function HomeScreen() {
-  const { logout } = useAuth();
+  const { logout, user } = useAuth();
   const colorScheme = useColorScheme();
   const isDark = colorScheme === 'dark';
   const insets = useSafeAreaInsets();
@@ -133,6 +89,9 @@ export default function HomeScreen() {
   };
 
   const today = new Date();
+  const [employee, setEmployee] = useState<any | null>(null);
+  const [salary, setSalary] = useState<any | null>(null);
+  const [attendanceRecords, setAttendanceRecords] = useState<any[]>([]);
   const [calMonth, setCalMonth] = useState(today.getMonth());
   const [calYear, setCalYear] = useState(today.getFullYear());
 
@@ -157,6 +116,42 @@ export default function HomeScreen() {
   // Fetch location
   useEffect(() => {
     let mounted = true;
+
+    const loadData = async () => {
+      try {
+        if (user?.id) {
+          // fetch staff profile (may be under /users/profile or /staff/me)
+          try {
+            const profile = await api.apiGet('/users/profile');
+            if (mounted) setEmployee(profile);
+          } catch (e) {
+            // fallback: attempt staff/me
+            try {
+              const s = await api.apiGet('/staff/me');
+              if (mounted) setEmployee(s);
+            } catch (e2) {
+              // leave employee null
+            }
+          }
+
+          // fetch salary history and attendance (best-effort)
+          try {
+            const staffId = (user && user.id) || (employee && employee.id);
+            if (staffId) {
+              const sal = await api.apiGet(`/salary/staff/${staffId}`);
+              if (mounted && Array.isArray(sal) && sal.length > 0) setSalary(sal[0]);
+
+              const att = await api.apiGet(`/staff/${staffId}/attendance`);
+              if (mounted && Array.isArray(att)) setAttendanceRecords(att);
+            }
+          } catch (e) {
+            // ignore fetch errors
+          }
+        }
+      } catch (error) {
+        // ignore
+      }
+    };
 
     const getLocation = async () => {
       try {
@@ -198,6 +193,7 @@ export default function HomeScreen() {
     };
 
     getLocation();
+    loadData();
 
     return () => {
       mounted = false;
@@ -213,11 +209,19 @@ export default function HomeScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Check In',
-          onPress: () => {
-            setCheckInTime(now);
-            setCheckOutTime(null);
-            setIsCheckedIn(true);
-            setElapsed('0h 0m');
+          onPress: async () => {
+            try {
+              const staffId = (user && user.id) || (employee && employee.id);
+              if (!staffId) throw new Error('Staff id not available');
+              const att = await api.apiPost(`/staff/${staffId}/check-in`);
+              const ci = att?.check_in ? new Date(att.check_in) : new Date();
+              setCheckInTime(ci);
+              setCheckOutTime(null);
+              setIsCheckedIn(true);
+              setElapsed('0h 0m');
+            } catch (e: any) {
+              Alert.alert('Check In Failed', e.message || 'Unable to check in');
+            }
           },
         },
       ],
@@ -237,10 +241,18 @@ export default function HomeScreen() {
         {
           text: 'Check Out',
           style: 'destructive',
-          onPress: () => {
-            setCheckOutTime(now);
-            setIsCheckedIn(false);
-            setElapsed(calcDuration(checkInTime, now));
+          onPress: async () => {
+            try {
+              const staffId = (user && user.id) || (employee && employee.id);
+              if (!staffId) throw new Error('Staff id not available');
+              const att = await api.apiPost(`/staff/${staffId}/check-out`);
+              const co = att?.check_out ? new Date(att.check_out) : new Date();
+              setCheckOutTime(co);
+              setIsCheckedIn(false);
+              setElapsed(calcDuration(checkInTime, co));
+            } catch (e: any) {
+              Alert.alert('Check Out Failed', e.message || 'Unable to check out');
+            }
           },
         },
       ],
@@ -254,7 +266,25 @@ export default function HomeScreen() {
     ? { label: 'Working', color: '#22c55e' }
     : { label: 'Completed', color: '#0ea5e9' };
 
-  const attendance = generateAttendance(calYear, calMonth);
+  const buildAttendanceMap = (records: any[], year: number, month: number) => {
+    const map: Record<number, string> = {};
+    records.forEach((r) => {
+      try {
+        const d = new Date(r.date);
+        if (d.getFullYear() === year && d.getMonth() === month) {
+          const day = d.getDate();
+          if (r.check_in && r.check_out) map[day] = 'P';
+          else if (r.check_in) map[day] = 'T';
+          else if (r.status) map[day] = r.status[0] ?? 'P';
+        }
+      } catch (e) {
+        // ignore
+      }
+    });
+    return map;
+  };
+
+  const attendance = buildAttendanceMap(attendanceRecords, calYear, calMonth);
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
   const firstDay = new Date(calYear, calMonth, 1).getDay();
 
@@ -398,23 +428,27 @@ export default function HomeScreen() {
           ]}
         >
           <View style={s.row}>
-            <View style={s.avatar}>
-              <Text style={s.avatarTxt} allowFontScaling={false}>
-                {EMPLOYEE.avatar}
-              </Text>
-            </View>
+              <View style={s.avatar}>
+                <Text style={s.avatarTxt} allowFontScaling={false}>
+                  {(employee?.name || user?.name || 'User')
+                    .split(' ')
+                    .map((n: string) => n[0])
+                    .slice(0, 2)
+                    .join('')}
+                </Text>
+              </View>
 
-            <View style={{ flex: 1, marginLeft: 12 }}>
-              <Text style={s.empName} allowFontScaling={false} numberOfLines={1}>
-                {EMPLOYEE.name}
-              </Text>
-              <Text style={s.empSub} allowFontScaling={false} numberOfLines={1}>
-                {EMPLOYEE.designation}
-              </Text>
-              <Text style={s.empSub} allowFontScaling={false} numberOfLines={1}>
-                {EMPLOYEE.department} · {EMPLOYEE.id}
-              </Text>
-            </View>
+              <View style={{ flex: 1, marginLeft: 12 }}>
+                <Text style={s.empName} allowFontScaling={false} numberOfLines={1}>
+                  {employee?.name || user?.name || 'Unknown'}
+                </Text>
+                <Text style={s.empSub} allowFontScaling={false} numberOfLines={1}>
+                  {employee?.designation || employee?.role || ''}
+                </Text>
+                <Text style={s.empSub} allowFontScaling={false} numberOfLines={1}>
+                  {(employee?.department || '') + (employee?.id ? ` · ${employee.id}` : '')}
+                </Text>
+              </View>
 
             <View style={s.dateBadge}>
               <Text style={s.dateDay} allowFontScaling={false}>
@@ -621,7 +655,7 @@ export default function HomeScreen() {
 
         {/* ── Salary Card ───────────────────────────────────── */}
         <Text style={[s.sectionTitle, { color: C.text }]} allowFontScaling={false}>
-          Salary — {SALARY.month}
+          Salary — {salary?.month ?? '—'}
         </Text>
 
         <View
@@ -640,17 +674,14 @@ export default function HomeScreen() {
                 style={[s.salaryAmt, { color: C.text, fontSize: IS_SMALL ? 24 : 30 }]}
                 allowFontScaling={false}
               >
-                {fmt(SALARY.netPay)}
+                {fmt(salary?.netPay ?? 0)}
               </Text>
             </View>
 
             <View style={[s.badge, { backgroundColor: C.present + '22', borderColor: C.present }]}>
               <Ionicons name="checkmark-circle" size={12} color={C.present} />
-              <Text
-                style={[s.badgeTxt, { color: C.present, marginLeft: 4 }]}
-                allowFontScaling={false}
-              >
-                Credited {SALARY.creditedOn}
+              <Text style={[s.badgeTxt, { color: C.present, marginLeft: 4 }]} allowFontScaling={false}>
+                Credited {salary?.creditedOn ?? '—'}
               </Text>
             </View>
           </View>
@@ -662,9 +693,9 @@ export default function HomeScreen() {
           </Text>
 
           {[
-            { label: 'Basic Salary', value: SALARY.basic },
-            { label: 'HRA', value: SALARY.hra },
-            { label: 'Other Allowances', value: SALARY.allowances },
+            { label: 'Basic Salary', value: salary?.basic ?? 0 },
+            { label: 'HRA', value: salary?.hra ?? 0 },
+            { label: 'Other Allowances', value: salary?.allowances ?? 0 },
           ].map((item) => (
             <View key={item.label} style={[s.row, { marginBottom: 8 }]}>
               <Text style={[s.salaryRow, { color: C.text }]} allowFontScaling={false}>
@@ -687,8 +718,8 @@ export default function HomeScreen() {
           </Text>
 
           {[
-            { label: 'Provident Fund (PF)', value: SALARY.pf },
-            { label: 'Income Tax (TDS)', value: SALARY.tax },
+            { label: 'Provident Fund (PF)', value: salary?.pf ?? 0 },
+            { label: 'Income Tax (TDS)', value: salary?.tax ?? 0 },
           ].map((item) => (
             <View key={item.label} style={[s.row, { marginBottom: 8 }]}>
               <Text style={[s.salaryRow, { color: C.text }]} allowFontScaling={false}>
@@ -719,7 +750,7 @@ export default function HomeScreen() {
               ]}
               allowFontScaling={false}
             >
-              {fmt(SALARY.netPay)}
+              {fmt(salary?.netPay ?? 0)}
             </Text>
           </View>
         </View>

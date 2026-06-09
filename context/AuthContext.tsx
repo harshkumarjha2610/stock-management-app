@@ -1,5 +1,6 @@
 // MyApp/context/AuthContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import api from '@/app/lib/api';
 
 interface User {
   email: string;
@@ -21,14 +22,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate checking for an active session on mount
+    // Initialize API (load token) and fetch profile if available
     const checkSession = async () => {
       try {
-        // Here we could check AsyncStorage, SecureStore, etc.
-        // For now, we start as unauthenticated.
-        setUser(null);
+        setIsLoading(true);
+        const existing = await api.init();
+        if (existing) {
+          // fetch profile
+          try {
+            const profile = await api.apiGet('/users/profile');
+            setUser(profile);
+          } catch (e) {
+            try {
+              const staff = await api.apiGet('/staff/me');
+              setUser(staff);
+            } catch (e2) {
+              setUser(null);
+            }
+          }
+        } else {
+          setUser(null);
+        }
       } catch (e) {
         console.error('Failed to load session:', e);
+        setUser(null);
       } finally {
         setIsLoading(false);
       }
@@ -39,28 +56,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = async (email: string, password: string) => {
     setIsLoading(true);
-    // Simulate API delay
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    const normalizedEmail = email.trim().toLowerCase();
-    
-    if (normalizedEmail === 'admin@employer.com' && password === '123456') {
-      const mockUser: User = {
-        email: normalizedEmail,
-        name: 'Harsh Kumar',
-        id: 'EMP-2401',
-      };
-      setUser(mockUser);
+    try {
+      const data = await api.apiPost('/auth/login', { email, password });
+      if (data?.token) {
+        await api.setToken(data.token);
+      }
+      if (data?.user) setUser(data.user);
       setIsLoading(false);
       return { success: true };
-    } else {
+    } catch (err: any) {
       setIsLoading(false);
-      return { success: false, error: 'Invalid email or password' };
+      return { success: false, error: err.message || 'Login failed' };
     }
   };
 
   const logout = () => {
     setUser(null);
+    api.setToken(null);
   };
 
   return (
